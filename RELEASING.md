@@ -51,3 +51,11 @@ differently or fail, without them changing anything?**
    `.github/scripts/homebrew-formula.sh X.Y.Z checksums.txt > Formula/linkrot.rb` in the tap,
    `brew audit --strict hans2103/tap/linkrot`, commit and push.
 4. Move the major tag for the Action: `git tag -f vX && git push -f origin vX`.
+5. Publish the release in the GitHub Marketplace: this is not automatic. Open the release
+   (`https://github.com/hans2103/linkrot/releases/tag/vX.Y.Z`) → *Edit* → tick *Publish this Action
+   to the GitHub Marketplace* → keep the category → *Update release* (asks for two-factor
+   authentication). Check that
+   [the Marketplace page](https://github.com/marketplace/actions/linkrot-dead-link-check) shows
+   the new version. The Marketplace reads `action.yml` from the tagged commit; its `name`
+   (`linkrot dead link check`) must stay unique there, so plain `linkrot` (a GitHub account) is
+   refused.
