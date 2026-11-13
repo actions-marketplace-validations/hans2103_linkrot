@@ -36,7 +36,7 @@ jobs:
         run: su site -c 'cd ~ && sh install.sh'
       - name: Check the installed tools
         run: |
-          su site -c '~/.local/bin/linkrot --version'
+          su site -c '~/.local/bin/linkrot --version' | grep -Eq '^linkrot [0-9]+\.[0-9]+\.[0-9]+ \('
           su site -c '~/.local/bin/lychee --version'
       - name: Find a broken link on a local site
         run: |
@@ -63,4 +63,4 @@ jobs:
           LINKROT_BIN: ${{ runner.temp }}/bin
         run: sh install.sh
       - name: Check the installed binary
-        run: '"$RUNNER_TEMP/bin/linkrot" --version'
+        run: '"$RUNNER_TEMP/bin/linkrot" --version | grep -Eq "^linkrot [0-9]+\.[0-9]+\.[0-9]+ \("'
