@@ -37,10 +37,11 @@ runs:
       run: |
         PATH="$RUNNER_TEMP/bin:$PATH"
         export PATH
-        # INPUT_ARGS is split on whitespace on purpose.
+        # INPUT_ARGS is split on whitespace on purpose; set -f stops glob expansion.
+        set -f
         # shellcheck disable=SC2086
         if [ -n "$INPUT_REPORT" ]; then
-          linkrot "$INPUT_URL" --report "$INPUT_REPORT" --quiet $INPUT_ARGS
+          linkrot "$INPUT_URL" --report "$INPUT_REPORT" $INPUT_ARGS
         else
-          linkrot "$INPUT_URL" --quiet $INPUT_ARGS
+          linkrot "$INPUT_URL" $INPUT_ARGS
         fi

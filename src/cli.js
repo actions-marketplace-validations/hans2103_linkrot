@@ -28,7 +28,7 @@ Options:
   --report <channel>      Send the result via github or mail instead of stdout
   --fail-on-broken        Exit 1 on broken links even with a report channel
   --config <path>         Config file (default ./.linkrot.toml)
-  --quiet                 No progress output
+  --quiet                 No progress output and no report note
   --version               Print the version
   --help                  Print this help
 
@@ -186,7 +186,7 @@ export async function main(argv, env = process.env, deps = {}) {
 
     if (config.report) {
       const note = await notifiers[config.report.channel](summary, config.report, { stateDir: config.stateDir, env });
-      if (note) stderr.write(`${note}\n`);
+      if (note && !values.quiet) stderr.write(`${note}\n`);
       return config.failOnBroken && broken.length > 0 ? 1 : 0;
     }
 

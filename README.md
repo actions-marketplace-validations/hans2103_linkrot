@@ -35,11 +35,13 @@ leaves lychee to Homebrew (`brew install lychee`).
 Run it from cron, for example every Monday at 06:00 with the result sent by mail:
 
 ```cron
-0 6 * * 1 ~/.local/bin/linkrot https://example.com --report mail
+0 6 * * 1 ~/.local/bin/linkrot https://example.com --report mail --quiet --config ~/linkrot/example.com.linkrot.toml
 ```
 
-With a report channel set, linkrot prints nothing and exits 0 when it finds broken links, so cron
-sends no extra mail. Mail needs a `[report.mail]` section in `.linkrot.toml` (see below) and SMTP
+Cron runs from `$HOME`, so linkrot would look for `~/.linkrot.toml`; `--config` points it at the
+site's own file instead. With a report channel set, linkrot prints nothing and exits 0 when it
+finds broken links, and `--quiet` also drops the one-line note about the report, so cron sends no
+extra mail. Mail needs a `[report.mail]` section in `.linkrot.toml` (see below) and SMTP
 settings: `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE` (`tls`, `ssl` or `none`), `SMTP_USER` and
 `SMTP_PASS`, from the environment or from `KEY=value` lines in `~/.smtp-credentials`. Without
 SMTP settings it falls back to `/usr/sbin/sendmail`.
@@ -92,7 +94,7 @@ linkrot <url> [options]
   --report <channel>      Send the result via github or mail instead of stdout
   --fail-on-broken        Exit 1 on broken links even with a report channel
   --config <path>         Config file (default ./.linkrot.toml)
-  --quiet                 No progress output
+  --quiet                 No progress output and no report note
   --version               Print the version
   --help                  Print this help
 ```

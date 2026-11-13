@@ -164,3 +164,20 @@ test('large piped JSON output is not truncated', { skip: !hasLychee }, async () 
     await server.close();
   }
 });
+
+test('--quiet suppresses the notifier note on stderr; without it the note is shown', { skip: !hasLychee }, async () => {
+  const server = await brokenSite();
+  try {
+    const notifyMail = async () => 'mail sent to a@example.org';
+    const config = tomlWithMail();
+    const quiet = await run([server.url, '--config', config, '--quiet'], { notifyMail });
+    assert.equal(quiet.code, 0);
+    assert.equal(quiet.out, '');
+    assert.equal(quiet.err, '');
+    const loud = await run([server.url, '--config', config], { notifyMail });
+    assert.equal(loud.code, 0);
+    assert.match(loud.err, /mail sent to a@example\.org/);
+  } finally {
+    await server.close();
+  }
+});
