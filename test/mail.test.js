@@ -40,7 +40,7 @@ test('first broken run sends; identical second run is skipped', async () => {
   const { run, sent, stateDir } = setup();
   assert.equal(await run(['https://x/a']), 'sent');
   assert.equal(sent.length, 1);
-  assert.equal(sent[0].subject, 'linkrot: 1 broken links on https://example.com');
+  assert.equal(sent[0].subject, 'linkrot: 1 broken link on https://example.com');
   assert.deepEqual(sent[0].to, ['a@example.org', 'b@example.org']);
   assert.equal(sent[0].from, 'linkrot@example.org');
   assert.ok(!sent[0].text.includes('<!-- linkrot:'));
@@ -55,6 +55,7 @@ test('changed set sends again', async () => {
   await run(['https://x/a']);
   assert.equal(await run(['https://x/a', 'https://x/b']), 'sent');
   assert.equal(sent.length, 2);
+  assert.equal(sent[1].subject, 'linkrot: 2 broken links on https://example.com');
 });
 
 test('always sends even when unchanged', async () => {

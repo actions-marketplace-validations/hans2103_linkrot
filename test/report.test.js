@@ -100,3 +100,9 @@ test('json round-trips', () => {
   const s = summary();
   assert.deepEqual(JSON.parse(renderJson(s)), s);
 });
+
+test('terminal: one hidden page says "and 1 more page"', () => {
+  const out = renderTerminal(summary({ broken: [{ ...summary().broken[0], pages: pages5.slice(0, 4) }] }), { color: false });
+  assert.match(out, /    … and 1 more page\n/);
+  assert.doesNotMatch(out, /1 more pages/);
+});

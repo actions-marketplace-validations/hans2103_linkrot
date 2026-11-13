@@ -48,7 +48,7 @@ export function renderTerminal(s, { color = false } = {}) {
     }
     for (const p of f.pages.slice(0, MAX_PAGES_SHOWN)) out.push(paint('dim', `    on ${pageLabel(p, host)}`));
     const more = f.pages.length - MAX_PAGES_SHOWN;
-    if (more > 0) out.push(paint('dim', `    … and ${more} more pages`));
+    if (more > 0) out.push(paint('dim', `    … and ${more} more ${more === 1 ? 'page' : 'pages'}`));
   };
 
   if (s.broken.length === 0) out.push(paint('green', 'No broken links'));

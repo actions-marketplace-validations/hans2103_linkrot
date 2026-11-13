@@ -56,7 +56,7 @@ export async function notifyMail(summary, report, { stateDir, env = process.env,
   let result = 'skipped';
   if (broken && (current !== state.fingerprint || report.always)) {
     message = {
-      subject: `linkrot: ${summary.broken.length} broken links on ${summary.site}`,
+      subject: `linkrot: ${summary.broken.length} broken ${summary.broken.length === 1 ? 'link' : 'links'} on ${summary.site}`,
       text: body(summary),
     };
     result = 'sent';
