@@ -13,14 +13,13 @@ $ linkrot https://example.com
 
 ## Install and run
 
-### Homebrew (macOS)
+### Homebrew (macOS, Linux x64)
 
 ```sh
 brew install hans2103/tap/linkrot
 ```
 
-This installs lychee as a dependency. (The tap `hans2103/homebrew-tap` is not published yet; use
-`install.sh` until it is.)
+This installs lychee as a dependency. Update with `brew upgrade linkrot`.
 
 ### install.sh (servers, no root, no Node)
 
