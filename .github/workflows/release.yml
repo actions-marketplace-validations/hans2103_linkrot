@@ -7,6 +7,9 @@ on:
 permissions:
   contents: write
 
+env:
+  LYCHEE_VERSION: 0.24.2
+
 jobs:
   test:
     uses: ./.github/workflows/test.yml
@@ -17,6 +20,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.23
       - run: npm ci
       - name: Build binaries
         run: |
@@ -30,10 +35,41 @@ jobs:
           done
           sha256sum linkrot-darwin-arm64 linkrot-darwin-x64 linkrot-linux-x64 > checksums.txt
           cat checksums.txt
+      - name: Install lychee
+        run: |
+          asset=lychee-x86_64-unknown-linux-gnu.tar.gz
+          base=https://github.com/lycheeverse/lychee/releases/download/lychee-v$LYCHEE_VERSION
+          curl -fsSL "$base/$asset" -o "$asset"
+          curl -fsSL "$base/$asset.sha256" -o "$asset.sha256"
+          sha256sum -c "$asset.sha256"
+          tar -xzf "$asset"
+          mkdir -p "$HOME/.local/bin"
+          mv lychee-x86_64-unknown-linux-gnu/lychee "$HOME/.local/bin/lychee"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Smoke test
         run: |
           ./linkrot-linux-x64 --version
           ./linkrot-linux-x64 --version | grep -q "^linkrot ${GITHUB_REF_NAME#v} ([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\})$"
+
+          # End to end: a local site with one good and one missing page.
+          site=$(mktemp -d)
+          printf '<html><body><a href="ok.html">ok</a> <a href="missing.html">missing</a></body></html>\n' > "$site/index.html"
+          printf '<html><body>ok</body></html>\n' > "$site/ok.html"
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory "$site" >/dev/null 2>&1 &
+          server=$!
+          trap 'kill "$server"' EXIT
+          for _ in $(seq 1 50); do curl -fs http://127.0.0.1:8765/ >/dev/null && break; sleep 0.1; done
+
+          code=0
+          ./linkrot-linux-x64 http://127.0.0.1:8765/ --format json > out.json || code=$?
+          cat out.json
+          test "$code" -eq 1
+          grep -q 'missing\.html' out.json
+
+          code=0
+          ./linkrot-linux-x64 http://127.0.0.1:8765/ --exclude missing --format json > out.json || code=$?
+          cat out.json
+          test "$code" -eq 0
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ github.token }}

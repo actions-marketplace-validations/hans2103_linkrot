@@ -40,5 +40,6 @@ differently or fail, without them changing anything?**
 1. `git log vX.Y.Z..HEAD --oneline` and classify each change with the table above.
 2. Write the release notes: one line per change, grouped as Breaking / Added / Fixed.
 3. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`. The release workflow builds the
-   binaries, uploads them with `checksums.txt` and updates the Homebrew formula.
+   binaries, smoke-tests the Linux binary and uploads them with `checksums.txt`.
+   Homebrew tap: see README, updated manually until automated.
 4. Move the major tag for the Action: `git tag -f vX && git push -f origin vX`.
