@@ -60,6 +60,7 @@ jobs:
   linkrot:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4 # so .linkrot.toml is available
       - uses: hans2103/linkrot@v0
         with:
           url: https://example.com
@@ -74,7 +75,7 @@ again, the issue is closed with a note. The run itself stays green.
 | `report` | `github` | Report channel; empty prints to the log |
 | `args` | | Extra arguments, e.g. `--crawl --max-pages 2000` |
 
-`.linkrot.toml` in the repository root is picked up automatically.
+The Action runs on Ubuntu runners. With the checkout step, `.linkrot.toml` in the repository root is picked up automatically.
 
 ## Options
 
