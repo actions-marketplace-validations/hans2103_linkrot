@@ -20,12 +20,16 @@ function isDoubt(url, code, timeout) {
 
 /**
  * Split crawl and lychee results into broken and doubtful links.
+ * URLs matching a RegExp in `exclude` are neither findings nor counted.
  * Returns {broken, doubt, linkCount}; findings are {url, code, text, pages}.
  */
-export function classify(crawl, checks) {
+export function classify(crawl, checks, { exclude = [] } = {}) {
+  const excluded = (url) => exclude.some((re) => re.test(url));
+
   // Reportable referrers per URL.
   const referrers = new Map();
   for (const [url, refs] of crawl.refs) {
+    if (excluded(url)) continue;
     const pages = new Set();
     for (const { page, kind } of refs) {
       if (!NEVER_REPORT_KINDS.includes(kind)) pages.add(page);
@@ -36,6 +40,7 @@ export function classify(crawl, checks) {
   const broken = [];
   const doubt = [];
   const add = (url, code, text, timeout) => {
+    if (excluded(url)) return;
     const finding = { url, code, text, pages: referrers.get(url) ?? [] };
     (isDoubt(url, code, timeout) ? doubt : broken).push(finding);
   };

@@ -181,3 +181,33 @@ test('--quiet suppresses the notifier note on stderr; without it the note is sho
     await server.close();
   }
 });
+
+test('--crawl --exclude keeps an excluded 404 page out of the report', { skip: !hasLychee }, async () => {
+  const server = await startServer({ '/': { body: '<html><body><a href="/gone">Gone</a></body></html>' } });
+  try {
+    const { code, out } = await run([server.url, '--crawl', '--exclude', '/gone', '--format', 'json']);
+    assert.equal(code, 0, out);
+    assert.deepEqual(JSON.parse(out).broken, []);
+    assert.ok(!server.hits.includes('/gone'), server.hits.join());
+  } finally {
+    await server.close();
+  }
+});
+
+test('an invalid --exclude regex exits 2', async () => {
+  const { code, err } = await run(['https://example.com', '--exclude', '(']);
+  assert.equal(code, 2);
+  assert.match(err, /exclude/i);
+});
+
+test('a start page answering HTTP 5xx exits 2: site unreachable', { skip: !hasLychee }, async () => {
+  const server = await startServer({ '/': { status: 503, body: 'down' } });
+  try {
+    const { code, out, err } = await run([server.url]);
+    assert.equal(code, 2);
+    assert.equal(out, '');
+    assert.match(err, /site unreachable: .*503/);
+  } finally {
+    await server.close();
+  }
+});

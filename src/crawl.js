@@ -1,5 +1,5 @@
 import { extractLinks } from './extract.js';
-import { rewriteToOrigin } from './discover.js';
+import { rewriteToOrigin, sameSite } from './discover.js';
 
 const TIMEOUT_MS = 20_000;
 const FILE_EXT = /\.(css|js|mjs|png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf|eot|pdf|zip|xml|ics|mp3|mp4)$/i;
@@ -23,6 +23,7 @@ export async function crawl({
   concurrency,
   userAgent,
   headers = {},
+  exclude = [],
   onProgress,
 }) {
   const pages = new Map();
@@ -32,8 +33,9 @@ export async function crawl({
 
   const queue = [];
   const queued = new Set();
+  const excluded = (url) => exclude.some((re) => re.test(url));
   function enqueue(url, depth) {
-    if (queued.has(url)) return;
+    if (queued.has(url) || excluded(url)) return;
     queued.add(url);
     queue.push({ url, depth });
   }
@@ -53,7 +55,7 @@ export async function crawl({
     });
   }
 
-  // The start URL first: its redirected origin becomes the site.
+  // The start URL first (never excluded): its redirected origin becomes the site.
   let startResult = null;
   try {
     const res = await fetchPage(startUrl);
@@ -72,8 +74,10 @@ export async function crawl({
       return;
     }
     pages.set(url, { status: res.status });
+    // A page of ours that redirects to another site is an external link: its status counts, its links do not.
+    const offSite = !preFetched && !sameSite(res.url, origin);
     const isHtml = (res.headers.get('content-type') ?? '').toLowerCase().includes('text/html');
-    if (res.status < 200 || res.status >= 300 || !isHtml) {
+    if (offSite || res.status < 200 || res.status >= 300 || !isHtml) {
       await res.body?.cancel().catch(() => {});
       return;
     }
@@ -149,5 +153,6 @@ export async function crawl({
   }
 
   await Promise.all(Array.from({ length: Math.max(1, concurrency) }, worker));
-  return { origin, pages, refs, truncated };
+  // start: the start page's key in `pages` (its final URL when the fetch succeeded).
+  return { origin, start: startResult?.url ?? startUrl, pages, refs, truncated };
 }

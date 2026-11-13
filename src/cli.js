@@ -74,6 +74,16 @@ function toInt(name, value) {
   return n;
 }
 
+function compileExcludes(patterns) {
+  return patterns.map((pattern) => {
+    try {
+      return new RegExp(pattern);
+    } catch (err) {
+      throw new LinkrotError(`Invalid exclude regex "${pattern}": ${err.message}`);
+    }
+  });
+}
+
 function parseCli(argv) {
   try {
     return parseArgs({ args: argv, options: OPTIONS, allowPositionals: true });
@@ -126,6 +136,7 @@ export async function main(argv, env = process.env, deps = {}) {
       },
     });
 
+    const exclude = compileExcludes(config.exclude);
     const progress = !values.quiet && stderr.isTTY;
     const say = (text) => progress && stderr.write(`\r${text}\x1b[K`);
     const userAgent = `Mozilla/5.0 (compatible; linkrot/${VERSION}; +https://github.com/hans2103/linkrot)`;
@@ -153,12 +164,14 @@ export async function main(argv, env = process.env, deps = {}) {
       concurrency: config.concurrency,
       userAgent,
       headers,
+      exclude,
       onProgress: (n) => say(`Collecting pages… ${n}`),
     });
 
-    // A failed start fetch is recorded under the start URL with a string status.
-    const startStatus = result.pages.get(config.url)?.status;
+    // A failed start fetch has a string status; a server error means the site is down, not a dead link.
+    const startStatus = result.pages.get(result.start)?.status;
     if (typeof startStatus === 'string') throw new LinkrotError(`cannot reach ${config.url}: ${startStatus}`);
+    if (startStatus >= 500) throw new LinkrotError(`site unreachable: ${config.url} answered HTTP ${startStatus}`);
 
     const toCheck = [...result.refs.keys()].filter((url) => !result.pages.has(url));
     say(`Checking links… (${toCheck.length})`);
@@ -172,7 +185,7 @@ export async function main(argv, env = process.env, deps = {}) {
     });
     if (progress) stderr.write('\r\x1b[K');
 
-    const { broken, doubt, linkCount } = classify(result, checks);
+    const { broken, doubt, linkCount } = classify(result, checks, { exclude });
     const summary = {
       site: result.origin,
       startedAt: startedAt.toISOString(),

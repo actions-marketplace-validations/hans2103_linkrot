@@ -113,3 +113,44 @@ test('a page linking the same URL twice yields one reference', async () => {
     await s.close();
   }
 });
+
+test('exclude: matching URLs are neither queued nor seeded; the start URL is always fetched', async () => {
+  const s = await startServer({
+    '/': html('<a href="/gone">g</a><a href="/kept">k</a>'),
+    '/kept': html('k'),
+  });
+  try {
+    const r = await crawl({
+      ...base,
+      startUrl: `${s.url}/`,
+      seeds: [`${s.url}/gone/seeded`],
+      exclude: [/\/gone/, new RegExp(`^${s.url}/$`)],
+    });
+    assert.ok(s.hits.includes('/'));
+    assert.ok(s.hits.includes('/kept'));
+    assert.ok(!s.hits.some((h) => h.startsWith('/gone')), s.hits.join());
+    assert.ok(!r.pages.has(`${s.url}/gone`));
+    assert.equal(r.start, `${s.url}/`);
+  } finally {
+    await s.close();
+  }
+});
+
+test('a same-site link redirecting off-site is recorded but not parsed', async () => {
+  const other = await startServer({ '/landing': html('<a href="/deep">d</a><img src="/pic.png">') });
+  const s = await startServer({
+    '/': html('<a href="/go">go</a>'),
+    '/go': { status: 302, headers: { location: `${other.url}/landing` }, body: '' },
+  });
+  try {
+    const r = await crawl({ ...base, startUrl: `${s.url}/` });
+    assert.equal(r.pages.get(`${s.url}/go`).status, 200);
+    assert.ok(!r.refs.has(`${other.url}/deep`));
+    assert.ok(!r.refs.has(`${other.url}/pic.png`));
+    assert.ok(![...r.refs.values()].flat().some((ref) => ref.page === `${s.url}/go`));
+    assert.deepEqual(other.hits, ['/landing']);
+  } finally {
+    await s.close();
+    await other.close();
+  }
+});

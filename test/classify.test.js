@@ -110,3 +110,17 @@ test('unchecked refs are not findings; sorted by page count desc then url', () =
   assert.deepEqual(r.broken.map((f) => f.url), [y, x, z]);
   assert.equal(r.linkCount, 4);
 });
+
+test('exclude drops matching findings from pages and checks, and from the link count', () => {
+  const page404 = `${O}/gone`;
+  const ext = 'https://other.test/gone/x';
+  const kept = 'https://other.test/kept';
+  const crawl = crawlOf({
+    pages: { [page404]: 404 },
+    refs: { [page404]: [ref(`${O}/a`)], [ext]: [ref(`${O}/a`)], [kept]: [ref(`${O}/a`)] },
+  });
+  const checks = new Map([[ext, res(404)], [kept, res(404)]]);
+  const r = classify(crawl, checks, { exclude: [/\/gone/] });
+  assert.deepEqual(r.broken.map((f) => f.url), [kept]);
+  assert.equal(r.linkCount, 1);
+});
