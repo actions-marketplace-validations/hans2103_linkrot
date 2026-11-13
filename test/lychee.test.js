@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, mkdtempSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { findLychee, checkLinks, parseLycheeJson } from '../src/lychee.js';
+import { findLychee, checkLinks, parseLycheeJson, buildLycheeArgs } from '../src/lychee.js';
 import { LinkrotError } from '../src/errors.js';
 import { startServer } from './helpers/server.js';
 
@@ -94,4 +94,18 @@ test('checkLinks runs real lychee against a local server', { skip: !hasLychee },
   } finally {
     await server.close();
   }
+});
+
+test('buildLycheeArgs passes basic auth scoped to the escaped origin', () => {
+  const args = buildLycheeArgs('/tmp/urls.txt', {
+    userAgent: 'ua',
+    excludes: [],
+    concurrency: 4,
+    basicAuth: { origin: 'https://example.org:8443', credentials: 'user:pass' },
+  });
+  const i = args.indexOf('--basic-auth');
+  assert.notEqual(i, -1);
+  assert.equal(args[i + 1], '^https://example\\.org:8443(/|$) user:pass');
+  assert.equal(args.at(-1), '/tmp/urls.txt');
+  assert.equal(buildLycheeArgs('/x', { userAgent: 'ua', excludes: [] }).includes('--basic-auth'), false);
 });

@@ -110,14 +110,11 @@ export function parseLycheeJson(json, urls) {
   return results;
 }
 
-export async function checkLinks(urls, { lychee, cacheDir, userAgent, excludes, concurrency = 16 }) {
-  if (urls.length === 0) return new Map();
-  mkdirSync(cacheDir, { recursive: true });
-  const workDir = mkdtempSync(join(tmpdir(), 'linkrot-'));
-  const listFile = join(workDir, 'urls.txt');
-  writeFileSync(listFile, urls.join('\n') + '\n');
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-  const args = [
+// basicAuth: {origin, credentials: 'user:pass'}; lychee scopes it to URLs matching the regex.
+export function buildLycheeArgs(listFile, { userAgent, excludes, concurrency = 16, basicAuth }) {
+  return [
     '--format', 'json',
     '--no-progress',
     '--scheme', 'https',
@@ -129,8 +126,19 @@ export async function checkLinks(urls, { lychee, cacheDir, userAgent, excludes, 
     '--max-cache-age', '1d',
     '--user-agent', userAgent,
     ...excludes.flatMap((pattern) => ['--exclude', pattern]),
+    ...(basicAuth ? ['--basic-auth', `^${escapeRegex(basicAuth.origin)}(/|$) ${basicAuth.credentials}`] : []),
     listFile,
   ];
+}
+
+export async function checkLinks(urls, { lychee, cacheDir, userAgent, excludes, concurrency = 16, basicAuth }) {
+  if (urls.length === 0) return new Map();
+  mkdirSync(cacheDir, { recursive: true });
+  const workDir = mkdtempSync(join(tmpdir(), 'linkrot-'));
+  const listFile = join(workDir, 'urls.txt');
+  writeFileSync(listFile, urls.join('\n') + '\n');
+
+  const args = buildLycheeArgs(listFile, { userAgent, excludes, concurrency, basicAuth });
 
   try {
     let stdout;
