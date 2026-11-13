@@ -1,0 +1,66 @@
+name: Install
+
+# Tests install.sh the way the servers use it: as a normal user without root,
+# on a clean Ubuntu, against the latest published release.
+
+on:
+  push:
+    paths:
+      - install.sh
+      - .github/workflows/install.yml
+  release:
+    types: [published]
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+jobs:
+  linux:
+    name: Ubuntu ${{ matrix.ubuntu }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ubuntu: ['24.04', '26.04']
+    container: ubuntu:${{ matrix.ubuntu }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare a clean system and a user without root
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq curl ca-certificates python3 >/dev/null
+          useradd -m site
+          cp install.sh /home/site/install.sh
+          chown site: /home/site/install.sh
+      - name: Run install.sh as that user
+        run: su site -c 'cd ~ && sh install.sh'
+      - name: Check the installed tools
+        run: |
+          su site -c '~/.local/bin/linkrot --version'
+          su site -c '~/.local/bin/lychee --version'
+      - name: Find a broken link on a local site
+        run: |
+          mkdir -p /srv/site
+          printf '<a href="ok.html">ok</a> <a href="missing.html">missing</a>' > /srv/site/index.html
+          printf 'ok' > /srv/site/ok.html
+          (cd /srv/site && python3 -m http.server 8000 >/dev/null 2>&1 &)
+          sleep 2
+          set +e
+          su site -c '~/.local/bin/linkrot http://127.0.0.1:8000/ --crawl --format json' > out.json
+          code=$?
+          set -e
+          cat out.json
+          test "$code" -eq 1
+          grep -q 'missing.html' out.json
+
+  macos:
+    name: macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run install.sh
+        env:
+          LINKROT_BIN: ${{ runner.temp }}/bin
+        run: sh install.sh
+      - name: Check the installed binary
+        run: '"$RUNNER_TEMP/bin/linkrot" --version'
