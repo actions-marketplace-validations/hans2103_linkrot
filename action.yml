@@ -1,4 +1,4 @@
-name: linkrot
+name: linkrot dead link check
 description: Find dead links on a website and report them as a GitHub issue.
 author: hans2103
 branding:
