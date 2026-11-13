@@ -109,6 +109,23 @@ linkrot https://example.com -v 2>&1 | grep -E '^link .*  broken( |$)'   # only t
 linkrot https://example.com -v 2>&1 >/dev/null                          # only the log lines, no report
 ```
 
+The log is long (one line per page and per link), so filter it. `2>&1 >/dev/null` sends the log
+lines into the pipe and drops the report:
+
+```sh
+# only problems: broken or doubtful
+linkrot https://example.com -v 2>&1 >/dev/null | grep -E '  (broken|doubt)( |$)'
+
+# everything except what went fine or was skipped on purpose
+linkrot https://example.com -v 2>&1 >/dev/null | grep -vE '^(skip|page +200|link +ok)'
+
+# count per kind and status
+linkrot https://example.com -v 2>&1 >/dev/null | awk '{print $1, $2}' | sort | uniq -c
+
+# which external domains the site links to
+linkrot https://example.com -v 2>&1 >/dev/null | awk '$1=="link"{print $3}' | awk -F/ '{print $3}' | sort | uniq -c | sort -rn
+```
+
 `--quiet` does not silence `--verbose`.
 
 ## Configuration: `.linkrot.toml`
