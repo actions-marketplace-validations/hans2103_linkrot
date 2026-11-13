@@ -110,6 +110,14 @@ export function parseLycheeJson(json, urls) {
   return results;
 }
 
+const escapeHtml = (text) =>
+  text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// One anchor per URL: lychee's plaintext extractor strips trailing . , ) ! * from URLs, its HTML extractor does not.
+export function linkListHtml(urls) {
+  return urls.map((url) => `<a href="${escapeHtml(url)}"></a>`).join('\n') + '\n';
+}
+
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // basicAuth: {origin, credentials: 'user:pass'}; lychee scopes it to URLs matching the regex.
@@ -124,6 +132,8 @@ export function buildLycheeArgs(listFile, { userAgent, excludes, concurrency = 1
     '--max-concurrency', String(concurrency),
     '--cache',
     '--max-cache-age', '1d',
+    // Only successes are cached: a failure is checked again on the next run.
+    '--cache-exclude-status', '400..',
     '--user-agent', userAgent,
     ...excludes.flatMap((pattern) => ['--exclude', pattern]),
     ...(basicAuth ? ['--basic-auth', `^${escapeRegex(basicAuth.origin)}(/|$) ${basicAuth.credentials}`] : []),
@@ -135,8 +145,8 @@ export async function checkLinks(urls, { lychee, cacheDir, userAgent, excludes, 
   if (urls.length === 0) return new Map();
   mkdirSync(cacheDir, { recursive: true });
   const workDir = mkdtempSync(join(tmpdir(), 'linkrot-'));
-  const listFile = join(workDir, 'urls.txt');
-  writeFileSync(listFile, urls.join('\n') + '\n');
+  const listFile = join(workDir, 'urls.html');
+  writeFileSync(listFile, linkListHtml(urls));
 
   const args = buildLycheeArgs(listFile, { userAgent, excludes, concurrency, basicAuth });
 

@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, mkdtempSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { findLychee, checkLinks, parseLycheeJson, buildLycheeArgs } from '../src/lychee.js';
+import { findLychee, checkLinks, parseLycheeJson, buildLycheeArgs, linkListHtml } from '../src/lychee.js';
 import { LinkrotError } from '../src/errors.js';
 import { startServer } from './helpers/server.js';
 
@@ -108,4 +108,40 @@ test('buildLycheeArgs passes basic auth scoped to the escaped origin', () => {
   assert.equal(args[i + 1], '^https://example\\.org:8443(/|$) user:pass');
   assert.equal(args.at(-1), '/tmp/urls.txt');
   assert.equal(buildLycheeArgs('/x', { userAgent: 'ua', excludes: [] }).includes('--basic-auth'), false);
+});
+
+test('checkLinks keeps trailing punctuation: 404s ending in "." and ")" are reported', { skip: !hasLychee }, async () => {
+  const server = await startServer({ '/foo': { body: 'ok' }, '/bar': { body: 'ok' }, '/q': { body: 'ok' } });
+  try {
+    const { path } = await findLychee();
+    const cacheDir = mkdtempSync(join(tmpdir(), 'linkrot-cache-'));
+    const dot = `${server.url}/foo.`;
+    const paren = `${server.url}/bar)`;
+    const query = `${server.url}/q?a=1&b=%22x%22`;
+    const map = await checkLinks([dot, paren, query], { lychee: path, cacheDir, userAgent: 'linkrot-test', excludes: [] });
+    assert.equal(map.get(dot).ok, false);
+    assert.equal(map.get(dot).code, 404);
+    assert.equal(map.get(paren).ok, false);
+    assert.equal(map.get(paren).code, 404);
+    assert.equal(map.get(query).ok, true);
+    assert.ok(server.hits.includes('/foo.'), server.hits.join());
+    assert.ok(server.hits.includes('/bar)'), server.hits.join());
+  } finally {
+    await server.close();
+  }
+});
+
+test('buildLycheeArgs keeps failures out of the cache', () => {
+  const args = buildLycheeArgs('/tmp/urls.html', { userAgent: 'ua', excludes: [] });
+  const i = args.indexOf('--cache-exclude-status');
+  assert.notEqual(i, -1);
+  assert.equal(args[i + 1], '400..');
+  assert.ok(args.includes('--cache'));
+});
+
+test('linkListHtml writes one escaped anchor per URL', () => {
+  assert.equal(
+    linkListHtml(['https://a.example/x.', 'https://a.example/q?a=1&b="<>"']),
+    '<a href="https://a.example/x."></a>\n<a href="https://a.example/q?a=1&amp;b=&quot;&lt;&gt;&quot;"></a>\n',
+  );
 });
