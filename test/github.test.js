@@ -42,12 +42,14 @@ const issue = (over = {}) => ({ number: 7, html_url: 'https://github.com/owner/n
 test('broken and no open issue: creates one with title, label and rendered body', async () => {
   const { fetch, calls } = fakeFetch({
     'GET /repos/owner/name/issues': json(200, []),
+    'GET /repos/owner/name/labels/linkrot': json(200, {}),
     'POST /repos/owner/name/issues': json(201, { number: 1, html_url: 'https://github.com/owner/name/issues/1' }),
   });
   const s = summary(['https://x.test/a']);
   const result = await notifyGithub(s, report(), { fetch });
   assert.deepEqual(result, { status: 'created', url: 'https://github.com/owner/name/issues/1' });
-  const [list, post] = calls;
+  const list = calls[0];
+  const post = calls.at(-1);
   assert.equal(list.query.get('state'), 'open');
   assert.equal(list.query.get('labels'), 'linkrot');
   assert.equal(list.query.get('per_page'), '100');
@@ -57,21 +59,49 @@ test('broken and no open issue: creates one with title, label and rendered body'
   assert.ok(post.body.body.startsWith(MARKER));
 });
 
-test('missing label (422 on create): label is created with color b60205, then the issue is retried', async () => {
+test('label exists: no label POST before creating the issue', async () => {
   const { fetch, calls } = fakeFetch({
     'GET /repos/owner/name/issues': json(200, []),
-    'POST /repos/owner/name/issues': [json(422, { message: 'Validation Failed' }), json(201, { number: 2, html_url: 'https://github.com/owner/name/issues/2' })],
+    'GET /repos/owner/name/labels/linkrot': json(200, {}),
+    'POST /repos/owner/name/issues': json(201, { html_url: 'new' }),
+  });
+  await notifyGithub(summary(['https://x.test/a']), report(), { fetch });
+  assert.ok(!calls.some((c) => c.method === 'POST' && c.path.endsWith('/labels')));
+});
+
+test('label missing (404): created with color b60205, then the issue', async () => {
+  const { fetch, calls } = fakeFetch({
+    'GET /repos/owner/name/issues': json(200, []),
+    'GET /repos/owner/name/labels/dead-links': json(404, { message: 'Not Found' }),
     'POST /repos/owner/name/labels': json(201, {}),
+    'POST /repos/owner/name/issues': json(201, { html_url: 'new' }),
   });
   const result = await notifyGithub(summary(['https://x.test/a']), report({ label: 'dead-links' }), { fetch });
   assert.equal(result.status, 'created');
   assert.deepEqual(calls.map((c) => `${c.method} ${c.path}`), [
     'GET /repos/owner/name/issues',
-    'POST /repos/owner/name/issues',
+    'GET /repos/owner/name/labels/dead-links',
     'POST /repos/owner/name/labels',
     'POST /repos/owner/name/issues',
   ]);
   assert.deepEqual(calls[2].body, { name: 'dead-links', color: 'b60205' });
+});
+
+test('label lookup failing with another status throws', async () => {
+  const { fetch } = fakeFetch({
+    'GET /repos/owner/name/issues': json(200, []),
+    'GET /repos/owner/name/labels/linkrot': json(500, { message: 'boom' }),
+  });
+  await assert.rejects(notifyGithub(summary(['https://x.test/a']), report(), { fetch }), /500.*boom/);
+});
+
+test('issue creation failure surfaces its own error', async () => {
+  const { fetch } = fakeFetch({
+    'GET /repos/owner/name/issues': json(200, []),
+    'GET /repos/owner/name/labels/linkrot': json(200, {}),
+    'POST /repos/owner/name/issues': json(422, { message: 'Validation Failed' }),
+  });
+  await assert.rejects(notifyGithub(summary(['https://x.test/a']), report(), { fetch }), /POST \/issues failed: 422 Validation Failed/);
 });
 
 test('broken with open issue and changed body: PATCHes the body, never creates', async () => {
@@ -131,6 +161,7 @@ test('a pull request carrying the marker does not count as the issue', async () 
   const pr = issue({ pull_request: {} });
   const { fetch } = fakeFetch({
     'GET /repos/owner/name/issues': json(200, [pr]),
+    'GET /repos/owner/name/labels/linkrot': json(200, {}),
     'POST /repos/owner/name/issues': json(201, { html_url: 'new' }),
   });
   assert.equal((await notifyGithub(summary(['https://x.test/a']), report(), { fetch })).status, 'created');
@@ -142,10 +173,11 @@ test('long Markdown is cut at the last complete line below 65000 characters with
   assert.ok(renderMarkdown(s).length > 65536);
   const { fetch, calls } = fakeFetch({
     'GET /repos/owner/name/issues': json(200, []),
+    'GET /repos/owner/name/labels/linkrot': json(200, {}),
     'POST /repos/owner/name/issues': json(201, { html_url: 'new' }),
   });
   await notifyGithub(s, report(), { fetch });
-  const text = calls[1].body.body;
+  const text = calls.at(-1).body.body;
   const note = '\n\n… report truncated; run linkrot locally for the full list.';
   assert.ok(text.endsWith(note));
   assert.ok(text.length <= 65536);

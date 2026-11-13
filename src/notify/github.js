@@ -53,14 +53,11 @@ export async function notifyGithub(summary, report, { fetch: doFetch = globalThi
   if (summary.broken.length > 0) {
     if (!existing) {
       const payload = { title: `Broken links on ${summary.site}`, body, labels: [label] };
-      let r = await call('POST', '/issues', payload);
-      if (r.error && (r.status === 404 || r.status === 422)) {
-        // Most likely the label does not exist yet: create it and try once more.
-        await ok('POST', '/labels', { name: label, color: 'b60205' });
-        r = await call('POST', '/issues', payload);
-      }
-      if (r.error) throw r.error;
-      return { status: 'created', url: r.data.html_url };
+      const known = await call('GET', `/labels/${encodeURIComponent(label)}`);
+      if (known.status === 404) await ok('POST', '/labels', { name: label, color: 'b60205' });
+      else if (known.error) throw known.error;
+      const r = await ok('POST', '/issues', payload);
+      return { status: 'created', url: r.html_url };
     }
     if (existing.body === body) return { status: 'noop', url: existing.html_url };
     await ok('PATCH', `/issues/${existing.number}`, { body });
