@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { parse } from 'smol-toml';
 import { LinkrotError } from './errors.js';
 import { BUILTIN_EXCLUDES } from './defaults.js';
@@ -36,6 +37,18 @@ async function readToml(cwd, configPath) {
 
 const pick = (...values) => values.find((v) => v !== undefined);
 
+// TOML type checks: a wrong type must fail loudly, never quietly change what is checked.
+function check(value, ok, key, expected) {
+  if (value !== undefined && !ok(value)) {
+    throw new LinkrotError(`Invalid ${key} in .linkrot.toml: expected ${expected}, got ${JSON.stringify(value)}`);
+  }
+  return value;
+}
+const isStringArray = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string');
+const isPositiveInt = (v) => Number.isInteger(v) && v > 0;
+const isBoolean = (v) => typeof v === 'boolean';
+const isAddress = (v) => typeof v === 'string' && v.trim() !== '';
+
 async function buildReport(channel, toml, env, host, ghToken) {
   if (channel === undefined) return null;
   if (!CHANNELS.includes(channel)) {
@@ -45,7 +58,9 @@ async function buildReport(channel, toml, env, host, ghToken) {
     const mail = toml.report?.mail ?? {};
     const to = [mail.to ?? []].flat();
     if (to.length === 0) throw new LinkrotError('Mail report needs "to" in [report.mail]');
-    return { channel, to, from: mail.from ?? `linkrot@${host}`, always: mail.always ?? false };
+    check(to, (list) => list.every(isAddress), '[report.mail] to', 'a non-empty address or a list of them');
+    check(mail.always, isBoolean, '[report.mail] always', 'true or false');
+    return { channel, to, from: mail.from ?? `linkrot@${host.replace(/^www\./, '')}`, always: mail.always ?? false };
   }
   const gh = toml.report?.github ?? {};
   const repo = gh.repo ?? env.GITHUB_REPOSITORY;
@@ -75,6 +90,13 @@ export async function loadConfig({ cliArgs = {}, cwd, configPath, env = process.
     throw new LinkrotError(`Unknown format "${format}" (expected ${FORMATS.join(', ')})`);
   }
 
+  check(toml.crawl, isBoolean, 'crawl', 'true or false');
+  check(toml.fail_on_broken, isBoolean, 'fail_on_broken', 'true or false');
+  check(toml.max_pages, isPositiveInt, 'max_pages', 'a positive integer');
+  check(toml.max_depth, isPositiveInt, 'max_depth', 'a positive integer');
+  check(toml.exclude, isStringArray, 'exclude', 'a list of regex strings');
+  check(toml.seeds, isStringArray, 'seeds', 'a list of URLs');
+
   return {
     url,
     crawl: pick(cliArgs.crawl, toml.crawl, false),
@@ -87,6 +109,6 @@ export async function loadConfig({ cliArgs = {}, cwd, configPath, env = process.
     failOnBroken: pick(cliArgs.failOnBroken, toml.fail_on_broken, false),
     report: await buildReport(pick(cliArgs.report, toml.report?.channel), toml, env, parsed.hostname, ghToken),
     auth: pick(cliArgs.auth, env.LINKROT_AUTH) ?? null,
-    stateDir: join(env.HOME, '.cache', 'linkrot', parsed.host),
+    stateDir: join(env.HOME ?? homedir(), '.cache', 'linkrot', parsed.host),
   };
 }

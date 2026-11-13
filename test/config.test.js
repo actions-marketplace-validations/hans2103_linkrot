@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { loadConfig } from '../src/config.js';
 import { LinkrotError } from '../src/errors.js';
@@ -128,7 +128,7 @@ test('ghToken is not called without a github channel', async () => {
 test('mail report: to as string or array, from default, always', async () => {
   const one = await dirWith('url = "https://www.a.example/"\n[report]\nchannel = "mail"\n[report.mail]\nto = "a@b.nl"\n');
   const c = await loadConfig({ cliArgs: {}, cwd: one, env: env() });
-  assert.deepEqual(c.report, { channel: 'mail', to: ['a@b.nl'], from: 'linkrot@www.a.example', always: false });
+  assert.deepEqual(c.report, { channel: 'mail', to: ['a@b.nl'], from: 'linkrot@a.example', always: false });
   const many = await dirWith('url = "https://a.example/"\n[report.mail]\nto = ["a@b.nl", "c@d.nl"]\nfrom = "me@a.example"\nalways = true\n');
   const d = await loadConfig({ cliArgs: { report: 'mail' }, cwd: many, env: env() });
   assert.deepEqual(d.report, { channel: 'mail', to: ['a@b.nl', 'c@d.nl'], from: 'me@a.example', always: true });
@@ -148,4 +148,50 @@ test('auth: CLI beats LINKROT_AUTH, default null', async () => {
   assert.equal((await loadConfig({ cliArgs: { ...u, auth: 'a:b' }, cwd, env: env({ LINKROT_AUTH: 'c:d' }) })).auth, 'a:b');
   assert.equal((await loadConfig({ cliArgs: u, cwd, env: env({ LINKROT_AUTH: 'c:d' }) })).auth, 'c:d');
   assert.equal((await loadConfig({ cliArgs: u, cwd, env: env() })).auth, null);
+});
+
+const invalid = async (toml, pattern) => {
+  const cwd = await dirWith(`url = "https://a.example/"\n${toml}`);
+  await assert.rejects(loadConfig({ cliArgs: {}, cwd, env: env() }), (err) => err instanceof LinkrotError && pattern.test(err.message));
+};
+
+test('exclude and seeds must be arrays of strings', async () => {
+  await invalid('exclude = "foo"\n', /exclude/);
+  await invalid('exclude = ["ok", 3]\n', /exclude/);
+  await invalid('seeds = "https://a.example/x"\n', /seeds/);
+  await invalid('seeds = [1]\n', /seeds/);
+});
+
+test('max_pages and max_depth must be positive integers', async () => {
+  await invalid('max_pages = 0\n', /max_pages/);
+  await invalid('max_pages = "10"\n', /max_pages/);
+  await invalid('max_depth = 1.5\n', /max_depth/);
+  await invalid('max_depth = -1\n', /max_depth/);
+});
+
+test('crawl, fail_on_broken and [report.mail] always must be booleans', async () => {
+  await invalid('crawl = "yes"\n', /crawl/);
+  await invalid('fail_on_broken = 1\n', /fail_on_broken/);
+  await invalid('[report]\nchannel = "mail"\n[report.mail]\nto = "a@b.nl"\nalways = "true"\n', /always/);
+});
+
+test('[report.mail] to entries must be non-empty strings', async () => {
+  await invalid('[report]\nchannel = "mail"\n[report.mail]\nto = ""\n', /to/);
+  await invalid('[report]\nchannel = "mail"\n[report.mail]\nto = ["a@b.nl", 5]\n', /to/);
+  await invalid('[report]\nchannel = "mail"\n[report.mail]\nto = 5\n', /to/);
+});
+
+test('valid typed values are accepted', async () => {
+  const cwd = await dirWith('url = "https://a.example/"\ncrawl = true\nfail_on_broken = false\nmax_pages = 10\nmax_depth = 2\nexclude = ["x"]\nseeds = ["https://a.example/s"]\n');
+  const c = await loadConfig({ cliArgs: {}, cwd, env: env() });
+  assert.equal(c.crawl, true);
+  assert.equal(c.maxPages, 10);
+  assert.equal(c.maxDepth, 2);
+  assert.deepEqual(c.seeds, ['https://a.example/s']);
+  assert.equal(c.exclude.at(-1), 'x');
+});
+
+test('stateDir falls back to the OS home directory when HOME is unset', async () => {
+  const c = await loadConfig({ cliArgs: { url: 'https://a.example/' }, cwd: await dirWith(), env: {} });
+  assert.equal(c.stateDir, join(homedir(), '.cache', 'linkrot', 'a.example'));
 });

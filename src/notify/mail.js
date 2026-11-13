@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import nodemailer from 'nodemailer';
 import { renderMarkdown } from '../report.js';
 import { loadState, saveState, fingerprint } from '../state.js';
@@ -25,7 +26,7 @@ async function readCredentials(home) {
 
 /** Nodemailer transport options from env (winning) or ~/.smtp-credentials; sendmail when neither sets a host. */
 export async function transportOptions(env) {
-  const file = await readCredentials(env.HOME);
+  const file = await readCredentials(env.HOME ?? homedir());
   const get = (key) => env[key] || file[key];
   const host = get('SMTP_HOST');
   if (!host) return { sendmail: true, path: '/usr/sbin/sendmail', newline: 'unix' };
