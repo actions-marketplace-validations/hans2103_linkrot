@@ -8,6 +8,7 @@ import { discoverSitemapPages } from './discover.js';
 import { crawl } from './crawl.js';
 import { classify } from './classify.js';
 import { renderTerminal, renderMarkdown, renderJson } from './report.js';
+import { notifyMail } from './notify/mail.js';
 import { LinkrotError } from './errors.js';
 import { VERSION, BUILD_DATE } from './version.js';
 
@@ -49,6 +50,14 @@ const OPTIONS = {
   help: { type: 'boolean' },
 };
 
+async function mailNote(summary, report, opts) {
+  const to = report.to.join(', ');
+  const result = await notifyMail(summary, report, opts);
+  if (result === 'sent') return `mail sent to ${to}`;
+  if (result === 'recovered') return `all-clear mail sent to ${to}`;
+  return 'no mail sent (nothing changed)';
+}
+
 const notImplemented = (channel) => async () => {
   throw new LinkrotError(`report channel ${channel} is not implemented yet`);
 };
@@ -78,7 +87,7 @@ export async function main(argv, env = process.env, deps = {}) {
   const stdout = deps.stdout ?? process.stdout;
   const stderr = deps.stderr ?? process.stderr;
   const notifiers = {
-    mail: deps.notifyMail ?? notImplemented('mail'),
+    mail: deps.notifyMail ?? mailNote,
     github: deps.notifyGithub ?? notImplemented('github'),
   };
 
