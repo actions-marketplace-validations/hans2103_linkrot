@@ -1,0 +1,52 @@
+{
+  "total": 4,
+  "unique": 4,
+  "successful": 1,
+  "unknown": 0,
+  "unsupported": 0,
+  "timeouts": 1,
+  "redirects": 0,
+  "remaps": 0,
+  "excludes": 1,
+  "errors": 1,
+  "cached": 0,
+  "success_map": {
+    "urls.txt": [
+      { "url": "https://ok.example.org/", "status": { "text": "200 OK", "code": 200 }, "span": { "line": 1, "column": 1 }, "duration": { "secs": 0, "nanos": 1000 } }
+    ]
+  },
+  "error_map": {
+    "urls.txt": [
+      {
+        "url": "https://x.example.org/bestaat-niet",
+        "status": { "text": "Rejected status code: 404 Not Found", "code": 404 },
+        "span": { "line": 2, "column": 1 },
+        "duration": { "secs": 0, "nanos": 1000 }
+      }
+    ]
+  },
+  "timeout_map": {
+    "urls.txt": [
+      {
+        "url": "http://10.255.255.1/slow",
+        "status": { "text": "Timeout", "details": "Request timed out" },
+        "span": { "line": 3, "column": 1 },
+        "duration": { "secs": 1, "nanos": 203650833 }
+      }
+    ]
+  },
+  "suggestion_map": {},
+  "redirect_map": {},
+  "excluded_map": {
+    "urls.txt": [
+      {
+        "url": "https://outlook.live.com/calendar/x",
+        "status": { "text": "Excluded", "details": "This is due to your 'exclude' values" },
+        "span": { "line": 4, "column": 1 },
+        "duration": { "secs": 0, "nanos": 24584 }
+      }
+    ]
+  },
+  "duration": { "secs": 1, "nanos": 205556500 },
+  "detailed_stats": false
+}
