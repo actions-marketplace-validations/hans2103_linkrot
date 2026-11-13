@@ -99,13 +99,14 @@ linkrot <url> [options]
   -h, --help              Print this help
 ```
 
-`-v` / `--verbose` writes one plain line per step to stderr (no colours, flushed as it happens), so
-stdout and the exit code stay as they are. Lines look like `<kind>  <status>  <url>  <detail>` with
-kinds `robots`, `sitemap`, `page`, `skip`, `link` and `done`:
+`-v` / `--verbose` writes one plain line per step to stderr (no colours), so stdout and the exit
+code stay as they are. Lines look like `<kind>  <status>  <url>  <detail>` with kinds `robots`,
+`sitemap`, `page`, `skip`, `link` and `done`. `robots`, `sitemap`, `page` and `skip` lines appear
+as pages are fetched; `link` lines appear once all links have been checked.
 
 ```sh
-linkrot https://example.com -v 2>&1 | grep '^link.*broken'   # watch broken links appear live
-linkrot https://example.com -v 2>&1 >/dev/null               # only the log lines, no report
+linkrot https://example.com -v 2>&1 | grep -E '^link .*  broken( |$)'   # only the broken links
+linkrot https://example.com -v 2>&1 >/dev/null                          # only the log lines, no report
 ```
 
 `--quiet` does not silence `--verbose`.
