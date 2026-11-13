@@ -9,6 +9,7 @@ import { crawl } from './crawl.js';
 import { classify } from './classify.js';
 import { renderTerminal, renderMarkdown, renderJson } from './report.js';
 import { notifyMail } from './notify/mail.js';
+import { notifyGithub } from './notify/github.js';
 import { LinkrotError } from './errors.js';
 import { VERSION, BUILD_DATE } from './version.js';
 
@@ -58,9 +59,13 @@ async function mailNote(summary, report, opts) {
   return 'no mail sent (nothing changed)';
 }
 
-const notImplemented = (channel) => async () => {
-  throw new LinkrotError(`report channel ${channel} is not implemented yet`);
-};
+async function githubNote(summary, report, opts) {
+  const { status, url } = await notifyGithub(summary, report, opts);
+  if (status === 'created') return `issue opened: ${url}`;
+  if (status === 'updated') return `issue updated: ${url}`;
+  if (status === 'closed') return `issue closed: ${url}`;
+  return 'issue unchanged';
+}
 
 function toInt(name, value) {
   if (value === undefined) return undefined;
@@ -88,7 +93,7 @@ export async function main(argv, env = process.env, deps = {}) {
   const stderr = deps.stderr ?? process.stderr;
   const notifiers = {
     mail: deps.notifyMail ?? mailNote,
-    github: deps.notifyGithub ?? notImplemented('github'),
+    github: deps.notifyGithub ?? githubNote,
   };
 
   try {
