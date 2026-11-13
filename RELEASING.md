@@ -41,12 +41,13 @@ differently or fail, without them changing anything?**
 2. Write the release notes: one line per change, grouped as Breaking / Added / Fixed.
 3. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`. The release workflow builds the
    binaries, smoke-tests the Linux binary and uploads them with `checksums.txt`.
-   The `homebrew` job then writes `Formula/linkrot.rb` in
+   The `homebrew` job (`.github/workflows/homebrew.yml`) then writes `Formula/linkrot.rb` in
    [`hans2103/homebrew-tap`](https://github.com/hans2103/homebrew-tap) from that `checksums.txt`
    (`.github/scripts/homebrew-formula.sh`) and pushes it as `linkrot X.Y.Z`. It needs the secret
    `HOMEBREW_TAP_TOKEN`: a fine-grained token with *Contents: read and write* on
    `hans2103/homebrew-tap` only. When the token expires the job fails and the release itself
-   stays; renew the token, then re-run the failed job. By hand:
+   stays; renew the token, then re-run the failed job. To check the token without changing the
+   tap: Actions → *Homebrew tap* → *Run workflow* with *dry run* on (the default). By hand:
    `.github/scripts/homebrew-formula.sh X.Y.Z checksums.txt > Formula/linkrot.rb` in the tap,
    `brew audit --strict hans2103/tap/linkrot`, commit and push.
 4. Move the major tag for the Action: `git tag -f vX && git push -f origin vX`.

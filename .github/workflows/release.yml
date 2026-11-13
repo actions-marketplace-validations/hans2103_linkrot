@@ -80,38 +80,7 @@ jobs:
 
   homebrew:
     needs: release
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Check tap token
-        env:
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-        run: |
-          if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
-            echo "::error::Secret HOMEBREW_TAP_TOKEN is not set; update hans2103/homebrew-tap by hand (see RELEASING.md)."
-            exit 1
-          fi
-      - uses: actions/checkout@v4
-        with:
-          repository: hans2103/homebrew-tap
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          path: tap
-      - name: Write formula
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release download "$GITHUB_REF_NAME" --pattern checksums.txt --dir "$RUNNER_TEMP"
-          .github/scripts/homebrew-formula.sh "${GITHUB_REF_NAME#v}" "$RUNNER_TEMP/checksums.txt" > tap/Formula/linkrot.rb
-          ruby -c tap/Formula/linkrot.rb
-          git -C tap diff
-      - name: Push to tap
-        run: |
-          cd tap
-          if git diff --quiet; then
-            echo "Formula already at ${GITHUB_REF_NAME#v}."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "linkrot ${GITHUB_REF_NAME#v}"
-          git push
+    uses: ./.github/workflows/homebrew.yml
+    with:
+      version: ${{ github.ref_name }}
+    secrets: inherit
