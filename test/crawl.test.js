@@ -103,3 +103,13 @@ test('external links are referenced but never fetched', async () => {
     await ext.close();
   }
 });
+
+test('a page linking the same URL twice yields one reference', async () => {
+  const s = await startServer({ '/': html('<a href="/x">1</a><a href="/x">2</a>'), '/x': html('x') });
+  try {
+    const r = await crawl({ ...base, startUrl: `${s.url}/` });
+    assert.deepEqual(r.refs.get(`${s.url}/x`), [{ page: `${s.url}/`, kind: 'a' }]);
+  } finally {
+    await s.close();
+  }
+});

@@ -40,6 +40,7 @@ export async function crawl({
 
   function addRef(url, page, kind) {
     const list = refs.get(url) ?? [];
+    if (list.some((r) => r.page === page && r.kind === kind)) return;
     list.push({ page, kind });
     refs.set(url, list);
   }
