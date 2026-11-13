@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.lycheecache
+.linkrot-state*
+.DS_Store
