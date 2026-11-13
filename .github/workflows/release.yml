@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: npm ci
+      - name: Build binaries
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          date=$(date -u +%Y-%m-%d)
+          for target in darwin-arm64 darwin-x64 linux-x64; do
+            bun build --compile --target="bun-$target" \
+              --define "globalThis.LINKROT_VERSION=\"$version\"" \
+              --define "globalThis.LINKROT_BUILD_DATE=\"$date\"" \
+              src/cli.js --outfile "linkrot-$target"
+          done
+          sha256sum linkrot-darwin-arm64 linkrot-darwin-x64 linkrot-linux-x64 > checksums.txt
+          cat checksums.txt
+      - name: Smoke test
+        run: ./linkrot-linux-x64 --version
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" linkrot-darwin-arm64 linkrot-darwin-x64 linkrot-linux-x64 checksums.txt --clobber

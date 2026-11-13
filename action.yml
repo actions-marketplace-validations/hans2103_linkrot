@@ -1,0 +1,46 @@
+name: linkrot
+description: Find dead links on a website and report them as a GitHub issue.
+author: hans2103
+branding:
+  icon: link
+  color: red
+
+inputs:
+  url:
+    description: Site to check, e.g. https://example.com
+    required: true
+  report:
+    description: Report channel, github or mail. Use an empty string to print to the log instead.
+    required: false
+    default: github
+  args:
+    description: Extra command-line arguments for linkrot, e.g. "--crawl --exclude ^https://example\.org/".
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Install linkrot and lychee
+      shell: sh
+      env:
+        LINKROT_BIN: ${{ runner.temp }}/bin
+      run: sh "${{ github.action_path }}/install.sh"
+
+    - name: Check links
+      shell: sh
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        INPUT_URL: ${{ inputs.url }}
+        INPUT_REPORT: ${{ inputs.report }}
+        INPUT_ARGS: ${{ inputs.args }}
+      run: |
+        PATH="$RUNNER_TEMP/bin:$PATH"
+        export PATH
+        # INPUT_ARGS is split on whitespace on purpose.
+        # shellcheck disable=SC2086
+        if [ -n "$INPUT_REPORT" ]; then
+          linkrot "$INPUT_URL" --report "$INPUT_REPORT" --quiet $INPUT_ARGS
+        else
+          linkrot "$INPUT_URL" --quiet $INPUT_ARGS
+        fi
