@@ -1,6 +1,8 @@
 import { Parser } from 'htmlparser2';
 
 const MEDIA_TAGS = new Set(['video', 'audio', 'source']);
+// <link> rels that name a host or a hint, not a resource: their href often 404s at the root.
+const HINT_RELS = new Set(['preconnect', 'dns-prefetch', 'prefetch', 'prerender', 'pingback']);
 
 /**
  * Extract every http(s) link from an HTML document.
@@ -51,7 +53,7 @@ export function extractLinks(html, pageUrl) {
           add(attrs.src, 'iframe');
           break;
         case 'link':
-          add(attrs.href, linkKind(attrs));
+          if (!relTokens(attrs).some((rel) => HINT_RELS.has(rel))) add(attrs.href, linkKind(attrs));
           break;
         case 'meta':
           if (attrs.property === 'og:url') add(attrs.content, 'og');
@@ -77,8 +79,12 @@ export function extractLinks(html, pageUrl) {
   return [...found].map(([url, kind]) => ({ url, kind }));
 }
 
+function relTokens(attrs) {
+  return (attrs.rel ?? '').toLowerCase().trim().split(/\s+/);
+}
+
 function linkKind(attrs) {
-  const rels = (attrs.rel ?? '').toLowerCase().split(/\s+/);
+  const rels = relTokens(attrs);
   if (rels.includes('stylesheet')) return 'stylesheet';
   if (rels.includes('canonical')) return 'canonical';
   if (rels.includes('alternate') && attrs.hreflang) return 'alternate';

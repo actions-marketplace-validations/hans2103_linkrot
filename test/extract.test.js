@@ -71,3 +71,22 @@ test('other link rels become other', () => {
 test('HTML entities in attributes are decoded', () => {
   assert.deepEqual(urls('<a href="/q?a=1&amp;b=2">x</a>'), ['https://ex.com/q?a=1&b=2']);
 });
+
+test('resource hints are not links: preconnect, dns-prefetch, prefetch, prerender, pingback', () => {
+  const html = `
+    <link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin>
+    <link rel="DNS-Prefetch" href="//cdn.example/">
+    <link rel="prefetch" href="/next">
+    <link rel="prerender" href="/later">
+    <link rel="pingback" href="/xmlrpc.php">
+    <link rel="preconnect dns-prefetch" href="https://both.example/">`;
+  assert.deepEqual(urls(html), []);
+});
+
+test('preload, icon and manifest links are still checked', () => {
+  const html = `
+    <link rel="preload" href="/font.woff2" as="font">
+    <link rel="icon" href="/f.ico">
+    <link rel="manifest" href="/site.webmanifest">`;
+  assert.deepEqual(urls(html), ['https://ex.com/font.woff2', 'https://ex.com/f.ico', 'https://ex.com/site.webmanifest']);
+});
