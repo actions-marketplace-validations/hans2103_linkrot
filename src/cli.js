@@ -7,7 +7,7 @@ import { findLychee, checkLinks } from './lychee.js';
 import { discoverSitemapPages } from './discover.js';
 import { crawl } from './crawl.js';
 import { classify } from './classify.js';
-import { renderTerminal, renderMarkdown, renderJson } from './report.js';
+import { renderTerminal, renderMarkdown, renderJson, summaryLine } from './report.js';
 import { notifyMail } from './notify/mail.js';
 import { notifyGithub } from './notify/github.js';
 import { LinkrotError } from './errors.js';
@@ -28,9 +28,10 @@ Options:
   --report <channel>      Send the result via github or mail instead of stdout
   --fail-on-broken        Exit 1 on broken links even with a report channel
   --config <path>         Config file (default ./.linkrot.toml)
-  --quiet                 No progress output and no report note
-  --version               Print the version
-  --help                  Print this help
+  -q, --quiet             No progress output and no report note
+  -v, --verbose           Log every page, sitemap and link checked (stderr)
+  -V, --version           Print the version
+  -h, --help              Print this help
 
 Exit codes: 0 nothing broken, 1 broken links found, 2 linkrot itself failed.
 `;
@@ -46,9 +47,10 @@ const OPTIONS = {
   report: { type: 'string' },
   'fail-on-broken': { type: 'boolean' },
   config: { type: 'string' },
-  quiet: { type: 'boolean' },
-  version: { type: 'boolean' },
-  help: { type: 'boolean' },
+  quiet: { type: 'boolean', short: 'q' },
+  verbose: { type: 'boolean', short: 'v' },
+  version: { type: 'boolean', short: 'V' },
+  help: { type: 'boolean', short: 'h' },
 };
 
 async function mailNote(summary, report, opts) {
@@ -118,7 +120,9 @@ export async function main(argv, env = process.env, deps = {}) {
     }
     if (positionals.length > 1) throw new LinkrotError(`Expected one url, got ${positionals.length}`);
 
-    const config = await loadConfig({
+    let config;
+    try {
+      config = await loadConfig({
       cwd: process.cwd(),
       configPath: values.config,
       env,
@@ -134,10 +138,27 @@ export async function main(argv, env = process.env, deps = {}) {
         failOnBroken: values['fail-on-broken'],
         auth: values.auth,
       },
-    });
+      });
+    } catch (err) {
+      if (err instanceof LinkrotError && err.message.startsWith('No url given')) {
+        stderr.write(`linkrot: ${err.message}\n\n${HELP}`);
+        return 2;
+      }
+      throw err;
+    }
 
     const exclude = compileExcludes(config.exclude);
-    const progress = !values.quiet && stderr.isTTY;
+    const progress = !values.quiet && !values.verbose && stderr.isTTY;
+    const logged = new Set();
+    // One plain line per distinct kind+url: "<kind>  <status>  <url>[  <detail>]".
+    const log = values.verbose
+      ? (kind, status, url, detail) => {
+          const key = `${kind} ${url}`;
+          if (logged.has(key)) return;
+          logged.add(key);
+          stderr.write(`${kind.padEnd(7)}  ${String(status).padEnd(4)}  ${url}${detail ? `  ${detail}` : ''}\n`);
+        }
+      : () => {};
     const say = (text) => progress && stderr.write(`\r${text}\x1b[K`);
     const userAgent = `Mozilla/5.0 (compatible; linkrot/${VERSION}; +https://github.com/hans2103/linkrot)`;
 
@@ -152,6 +173,7 @@ export async function main(argv, env = process.env, deps = {}) {
     let sitemapPages = [];
     if (!config.crawl) sitemapPages = await discoverSitemapPages(new URL(config.url).origin, {
         userAgent,
+        log,
         fetch: (url, options = {}) => fetch(url, { ...options, headers: { ...headers, ...options.headers } }),
       });
 
@@ -165,6 +187,8 @@ export async function main(argv, env = process.env, deps = {}) {
       userAgent,
       headers,
       exclude,
+      sitemapUrls: new Set(sitemapPages),
+      log,
       onProgress: (n) => say(`Collecting pages… ${n}`),
     });
 
@@ -172,6 +196,12 @@ export async function main(argv, env = process.env, deps = {}) {
     const startStatus = result.pages.get(result.start)?.status;
     if (typeof startStatus === 'string') throw new LinkrotError(`cannot reach ${config.url}: ${startStatus}`);
     if (startStatus >= 500) throw new LinkrotError(`site unreachable: ${config.url} answered HTTP ${startStatus}`);
+
+    if (values.verbose) {
+      for (const url of result.refs.keys()) {
+        if (!result.pages.has(url) && exclude.some((re) => re.test(url))) log('skip', 'skip', url, 'excluded');
+      }
+    }
 
     const toCheck = [...result.refs.keys()].filter((url) => !result.pages.has(url));
     say(`Checking links… (${toCheck.length})`);
@@ -196,6 +226,28 @@ export async function main(argv, env = process.env, deps = {}) {
       broken,
       doubt,
     };
+
+    if (values.verbose) {
+      const verdict = new Map([...broken.map((f) => [f.url, 'broken']), ...doubt.map((f) => [f.url, 'doubt'])]);
+      const findings = new Map([...broken, ...doubt].map((f) => [f.url, f]));
+      const link = (url, status, pages) => {
+        const label = verdict.get(url);
+        const on = pages.length > 0 ? `on ${pages.length} ${pages.length === 1 ? 'page' : 'pages'}` : '';
+        log('link', status, url, [label, on].filter(Boolean).join('  '));
+      };
+      for (const [url, check] of checks) {
+        const f = findings.get(url);
+        const pages = f?.pages ?? [...new Set((result.refs.get(url) ?? []).map((r) => r.page))];
+        const status = check.timeout ? 'timeout' : check.code ?? (check.ok ? 'ok' : 'ERR');
+        link(url, status, pages);
+      }
+      // Crawled pages that failed never went through lychee.
+      for (const f of [...broken, ...doubt]) {
+        if (!result.pages.has(f.url)) continue;
+        link(f.url, f.code ?? (f.text === 'timeout' ? 'timeout' : 'ERR'), f.pages);
+      }
+      log('done', '—', summaryLine(summary));
+    }
 
     if (config.report) {
       const note = await notifiers[config.report.channel](summary, config.report, { stateDir: config.stateDir, env });

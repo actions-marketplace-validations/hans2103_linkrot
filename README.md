@@ -93,10 +93,22 @@ linkrot <url> [options]
   --report <channel>      Send the result via github or mail instead of stdout
   --fail-on-broken        Exit 1 on broken links even with a report channel
   --config <path>         Config file (default ./.linkrot.toml)
-  --quiet                 No progress output and no report note
-  --version               Print the version
-  --help                  Print this help
+  -q, --quiet             No progress output and no report note
+  -v, --verbose           Log every page, sitemap and link checked (stderr)
+  -V, --version           Print the version
+  -h, --help              Print this help
 ```
+
+`-v` / `--verbose` writes one plain line per step to stderr (no colours, flushed as it happens), so
+stdout and the exit code stay as they are. Lines look like `<kind>  <status>  <url>  <detail>` with
+kinds `robots`, `sitemap`, `page`, `skip`, `link` and `done`:
+
+```sh
+linkrot https://example.com -v 2>&1 | grep '^link.*broken'   # watch broken links appear live
+linkrot https://example.com -v 2>&1 >/dev/null               # only the log lines, no report
+```
+
+`--quiet` does not silence `--verbose`.
 
 ## Configuration: `.linkrot.toml`
 

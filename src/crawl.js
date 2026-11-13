@@ -25,6 +25,8 @@ export async function crawl({
   headers = {},
   exclude = [],
   onProgress,
+  sitemapUrls = new Set(),
+  log = () => {},
 }) {
   const pages = new Map();
   const refs = new Map();
@@ -34,10 +36,14 @@ export async function crawl({
   const queue = [];
   const queued = new Set();
   const excluded = (url) => exclude.some((re) => re.test(url));
-  function enqueue(url, depth) {
+  const path = (url) => {
+    const u = new URL(url);
+    return u.pathname + u.search;
+  };
+  function enqueue(url, depth, from) {
     if (queued.has(url) || excluded(url)) return;
     queued.add(url);
-    queue.push({ url, depth });
+    queue.push({ url, depth, from });
   }
 
   function addRef(url, page, kind) {
@@ -63,20 +69,23 @@ export async function crawl({
     startResult = { url: res.url, res };
   } catch (err) {
     pages.set(startUrl, { status: failureStatus(err) });
+    log('page', failureStatus(err), startUrl, 'start');
   }
 
-  async function process(url, depth, preFetched) {
+  async function process(url, depth, preFetched, from) {
     let res;
     try {
       res = preFetched ?? (await fetchPage(url));
     } catch (err) {
       pages.set(url, { status: failureStatus(err) });
+      log('page', failureStatus(err), url, from);
       return;
     }
     pages.set(url, { status: res.status });
     // A page of ours that redirects to another site is an external link: its status counts, its links do not.
     const offSite = !preFetched && !sameSite(res.url, origin);
     const isHtml = (res.headers.get('content-type') ?? '').toLowerCase().includes('text/html');
+    log('page', res.status, url, offSite ? 'off-site' : from);
     if (offSite || res.status < 200 || res.status >= 300 || !isHtml) {
       await res.body?.cancel().catch(() => {});
       return;
@@ -86,14 +95,16 @@ export async function crawl({
       html = await res.text();
     } catch (err) {
       pages.set(url, { status: failureStatus(err) });
+      log('page', failureStatus(err), url, from);
       return;
     }
     for (const link of extractLinks(html, res.url)) {
       const internal = rewriteToOrigin(link.url, origin);
       const target = internal ?? link.url;
       addRef(target, url, link.kind);
-      if (follow && internal && depth < maxDepth && (link.kind === 'a' || link.kind === 'iframe') && looksLikePage(internal)) {
-        enqueue(internal, depth + 1);
+      if (follow && internal && (link.kind === 'a' || link.kind === 'iframe') && looksLikePage(internal)) {
+        if (depth < maxDepth) enqueue(internal, depth + 1, `from ${path(url)}`);
+        else if (!queued.has(internal) && !excluded(internal)) log('skip', 'skip', internal, 'max-depth');
       }
     }
   }
@@ -105,12 +116,12 @@ export async function crawl({
   }
   for (const seed of seeds) {
     const url = rewriteToOrigin(seed, origin);
-    if (url) enqueue(url, 0);
+    if (url) enqueue(url, 0, sitemapUrls.has(seed) ? 'sitemap' : 'seed');
   }
 
   // The start page is processed up front, outside the pool, so its links are queued first.
   if (startResult) {
-    await process(startResult.url, 0, startResult.res);
+    await process(startResult.url, 0, startResult.res, 'start');
     onProgress?.(pages.size);
   }
 
@@ -136,14 +147,15 @@ export async function crawl({
       }
       if (pages.size + active >= maxPages) {
         truncated = true;
+        for (const dropped of queue) log('skip', 'skip', dropped.url, 'max-pages');
         queue.length = 0;
         notify();
         continue;
       }
-      const { url, depth } = queue.shift();
+      const { url, depth, from } = queue.shift();
       active++;
       try {
-        await process(url, depth);
+        await process(url, depth, undefined, from);
       } finally {
         active--;
         onProgress?.(pages.size);

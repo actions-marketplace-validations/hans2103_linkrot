@@ -211,3 +211,67 @@ test('a start page answering HTTP 5xx exits 2: site unreachable', { skip: !hasLy
     await server.close();
   }
 });
+
+test('-h prints usage with short options and exits 0', async () => {
+  const { code, out } = await run(['-h']);
+  assert.equal(code, 0);
+  assert.match(out, /Usage: linkrot/);
+  assert.match(out, /-v, --verbose/);
+  assert.match(out, /-h, --help/);
+});
+
+test('-V prints the version', async () => {
+  const { code, out } = await run(['-V']);
+  assert.equal(code, 0);
+  assert.match(out, /^linkrot \S+/);
+});
+
+test('no url prints usage on stderr and exits 2', async () => {
+  const { code, out, err } = await run([]);
+  assert.equal(code, 2);
+  assert.equal(out, '');
+  assert.match(err, /No url given/);
+  assert.match(err, /Usage: linkrot/);
+});
+
+test('--verbose logs every step to stderr and leaves stdout unchanged', { skip: !hasLychee }, async () => {
+  const server = await brokenSite();
+  try {
+    const plain = await run([server.url]);
+    const verbose = await run([server.url, '-v']);
+    assert.equal(verbose.code, 1);
+    assert.equal(verbose.out.replace(/· [\d.]+s/, ''), plain.out.replace(/· [\d.]+s/, ''));
+    assert.match(verbose.err, /^robots {3}404 {3}\S+\/robots\.txt {2}0 sitemaps$/m);
+    assert.match(verbose.err, /^sitemap {2}200 {3}\S+\/sitemap\.xml {2}2 pages$/m);
+    assert.match(verbose.err, /^page {5}200 {3}\S+\/about {2}sitemap$/m);
+    assert.match(verbose.err, /^link {5}404 {3}\S+\/gone {2}broken {2}on 1 page$/m);
+    assert.match(verbose.err, /^link {5}404 {3}\S+\/missing\.png {2}broken/m);
+    assert.match(verbose.err, /^skip {5}skip {2}https:\/\/outlook\.live\.com\S* {2}excluded$/m);
+    assert.match(verbose.err, /^done .* pages · /m);
+    assert.ok(!verbose.err.includes('\x1b'), 'no ANSI');
+    assert.ok(!verbose.err.includes('\r'), 'no carriage return');
+  } finally {
+    await server.close();
+  }
+});
+
+test('--quiet does not silence --verbose', { skip: !hasLychee }, async () => {
+  const server = await brokenSite();
+  try {
+    const { err } = await run([server.url, '-q', '-v']);
+    assert.match(err, /^page /m);
+  } finally {
+    await server.close();
+  }
+});
+
+test('--verbose with --crawl logs followed pages with referrer and depth skips', { skip: !hasLychee }, async () => {
+  const server = await brokenSite();
+  try {
+    const { err } = await run([server.url, '--crawl', '--max-depth', '1', '-v']);
+    assert.match(err, /^page {5}404 {3}\S+\/gone {2}from \/$/m);
+    assert.match(err, /^link {5}404 {3}\S+\/gone {2}broken/m);
+  } finally {
+    await server.close();
+  }
+});

@@ -42,6 +42,7 @@ function locs(xml) {
   return out;
 }
 
+// {status, text}: text is null unless the answer was 2xx; status is the HTTP code, 'timeout' or an error code.
 async function fetchText(fetchFn, url, userAgent) {
   try {
     const res = await fetchFn(url, {
@@ -49,19 +50,20 @@ async function fetchText(fetchFn, url, userAgent) {
       redirect: 'follow',
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { status: res.status, text: null };
     const bytes = new Uint8Array(await res.arrayBuffer());
     if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
       const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-      return await new Response(stream).text();
+      return { status: res.status, text: await new Response(stream).text() };
     }
-    return new TextDecoder().decode(bytes);
-  } catch {
-    return null;
+    return { status: res.status, text: new TextDecoder().decode(bytes) };
+  } catch (err) {
+    const status = err?.name === 'TimeoutError' || err?.name === 'AbortError' ? 'timeout' : (err?.cause?.code ?? err?.code ?? 'error');
+    return { status, text: null };
   }
 }
 
-export async function discoverSitemapPages(origin, { fetch: fetchFn = fetch, userAgent } = {}) {
+export async function discoverSitemapPages(origin, { fetch: fetchFn = fetch, userAgent, log = () => {} } = {}) {
   const base = new URL(origin).origin;
   const pages = new Set();
   const seen = new Set();
@@ -69,20 +71,27 @@ export async function discoverSitemapPages(origin, { fetch: fetchFn = fetch, use
   async function visit(url, depth) {
     if (depth >= MAX_DEPTH || seen.has(url)) return;
     seen.add(url);
-    const text = await fetchText(fetchFn, url, userAgent);
-    if (text === null) return;
+    const { status, text } = await fetchText(fetchFn, url, userAgent);
+    if (text === null) {
+      log('sitemap', status, url);
+      return;
+    }
     const found = locs(text).map((l) => rewriteToOrigin(l, base)).filter(Boolean);
-    if (/<sitemapindex[\s>]/i.test(text)) {
+    const isIndex = /<sitemapindex[\s>]/i.test(text);
+    log('sitemap', status, url, isIndex ? 'index' : `${found.length} pages`);
+    if (isIndex) {
       for (const child of found) await visit(child, depth + 1);
     } else {
       for (const page of found) pages.add(page);
     }
   }
 
-  const robots = await fetchText(fetchFn, `${base}/robots.txt`, userAgent);
+  const robotsUrl = `${base}/robots.txt`;
+  const { status: robotsStatus, text: robots } = await fetchText(fetchFn, robotsUrl, userAgent);
   const listed = robots
     ? [...robots.matchAll(/^\s*sitemap:\s*(\S+)/gim)].map((m) => rewriteToOrigin(m[1], base)).filter(Boolean)
     : [];
+  log('robots', robotsStatus, robotsUrl, `${listed.length} sitemaps`);
   for (const url of listed.length ? listed : [`${base}/sitemap.xml`]) await visit(url, 0);
   return [...pages];
 }

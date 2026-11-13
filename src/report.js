@@ -25,7 +25,7 @@ function status(f, doubt) {
   return doubt ? 'timeout' : 'ERR';
 }
 
-function summaryLine(s) {
+export function summaryLine(s) {
   const secs = (s.durationMs / 1000).toFixed(1);
   let line =
     `${s.pageCount} pages · ${s.linkCount} links · ${s.broken.length} broken · ` +
