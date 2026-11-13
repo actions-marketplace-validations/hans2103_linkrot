@@ -2,7 +2,9 @@ import { createServer } from 'node:http';
 
 // routes: { '/path': { status?, type?, body, headers? } }; unknown paths give 404.
 export async function startServer(routes) {
+  const hits = [];
   const server = createServer((req, res) => {
+    hits.push(req.url);
     const path = req.url.split('?')[0];
     const route = routes[path] ?? routes[req.url];
     if (!route) {
@@ -20,6 +22,7 @@ export async function startServer(routes) {
   const { port } = server.address();
   return {
     url: `http://127.0.0.1:${port}`,
+    hits,
     close: () =>
       new Promise((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
