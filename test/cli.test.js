@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, execFile } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -97,13 +97,18 @@ test('a report channel keeps stdout empty and exits 0; --fail-on-broken exits 1'
   const server = await brokenSite();
   try {
     const sent = [];
-    const notifyMail = async (summary) => (sent.push(summary), 'mail sent');
+    const notifyMail = async (summary, report, opts) => (sent.push({ summary, report, opts }), 'mail sent');
     const config = tomlWithMail();
     const a = await run([server.url, '--config', config], { notifyMail });
     assert.equal(a.code, 0);
     assert.equal(a.out, '');
     assert.equal(sent.length, 1);
-    assert.equal(sent[0].broken.length, 2);
+    assert.equal(sent[0].summary.broken.length, 2);
+    assert.equal(sent[0].report.channel, 'mail');
+    assert.deepEqual(sent[0].report.to, ['a@example.org']);
+    assert.match(sent[0].opts.stateDir, /linkrot/);
+    assert.equal(typeof sent[0].opts.env.HOME, 'string');
+    assert.match(a.err, /mail sent/);
 
     const b = await run([server.url, '--config', config, '--fail-on-broken'], { notifyMail });
     assert.equal(b.code, 1);
@@ -137,5 +142,25 @@ test('--auth sends a Basic header on page fetches', { skip: !hasLychee }, async 
   } finally {
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('large piped JSON output is not truncated', { skip: !hasLychee }, async () => {
+  const routes = {};
+  const server = await startServer(routes);
+  const links = Array.from({ length: 2500 }, (_, i) => `<a href="/missing-page-with-a-long-name-${i}">x</a>`).join('\n');
+  routes['/'] = { body: `<html><body>${links}</body></html>` };
+  try {
+    const home = mkdtempSync(join(tmpdir(), 'linkrot-home-'));
+    const cli = new URL('../src/cli.js', import.meta.url).pathname;
+    const { code, stdout } = await new Promise((resolve) => {
+      execFile(process.execPath, [cli, server.url, '--format', 'json'], { env: { ...process.env, HOME: home }, maxBuffer: 64 * 1024 * 1024 },
+        (error, out) => resolve({ code: error?.code ?? 0, stdout: out }));
+    });
+    assert.equal(code, 1);
+    assert.ok(stdout.length > 200 * 1024, `only ${stdout.length} bytes`);
+    assert.equal(JSON.parse(stdout).broken.length, 2500);
+  } finally {
+    await server.close();
   }
 });

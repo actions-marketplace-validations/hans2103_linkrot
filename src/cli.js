@@ -171,9 +171,8 @@ export async function main(argv, env = process.env, deps = {}) {
     };
 
     if (config.report) {
-      const text = render(summary, config.format, false);
-      const note = await notifiers[config.report.channel](summary, text, config.report);
-      if (note && !values.quiet) stderr.write(`${note}\n`);
+      const note = await notifiers[config.report.channel](summary, config.report, { stateDir: config.stateDir, env });
+      if (note) stderr.write(`${note}\n`);
       return config.failOnBroken && broken.length > 0 ? 1 : 0;
     }
 
@@ -187,6 +186,7 @@ export async function main(argv, env = process.env, deps = {}) {
 }
 
 function isDirectRun() {
+  if (import.meta.main === true) return true;
   if (!process.argv[1]) return false;
   try {
     return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
@@ -196,5 +196,6 @@ function isDirectRun() {
 }
 
 if (isDirectRun()) {
-  process.exit(await main(process.argv.slice(2), process.env));
+  // exitCode, not process.exit: piped stdout may still be flushing.
+  process.exitCode = await main(process.argv.slice(2), process.env);
 }
