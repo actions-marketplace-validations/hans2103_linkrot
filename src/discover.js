@@ -1,4 +1,5 @@
 const MAX_DEPTH = 3;
+const TIMEOUT_MS = 20_000;
 
 function hostKey(url) {
   try {
@@ -43,7 +44,11 @@ function locs(xml) {
 
 async function fetchText(fetchFn, url, userAgent) {
   try {
-    const res = await fetchFn(url, { headers: { 'user-agent': userAgent }, redirect: 'follow' });
+    const res = await fetchFn(url, {
+      headers: { 'user-agent': userAgent },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
     if (!res.ok) return null;
     const bytes = new Uint8Array(await res.arrayBuffer());
     if (bytes[0] === 0x1f && bytes[1] === 0x8b) {

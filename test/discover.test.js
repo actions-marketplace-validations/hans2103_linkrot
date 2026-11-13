@@ -135,3 +135,14 @@ test('rewriteToOrigin swaps scheme and host only', () => {
   );
   assert.equal(rewriteToOrigin('https://other.org/a', 'https://example.org'), null);
 });
+
+test('every discovery fetch carries a timeout signal', async () => {
+  const signals = [];
+  const fakeFetch = async (url, options = {}) => {
+    signals.push(options.signal);
+    return new Response('', { status: 404 });
+  };
+  await discoverSitemapPages('https://example.org', { fetch: fakeFetch, userAgent });
+  assert.equal(signals.length, 2);
+  assert.ok(signals.every((s) => s instanceof AbortSignal), 'missing signal');
+});
