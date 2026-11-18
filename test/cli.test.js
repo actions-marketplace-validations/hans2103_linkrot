@@ -275,3 +275,11 @@ test('--verbose with --crawl logs followed pages with referrer and depth skips',
     await server.close();
   }
 });
+
+test('stripRuntimeArgs drops BUN_OPTIONS flags that a compiled binary leaks into argv', async () => {
+  const { stripRuntimeArgs } = await import('../src/cli.js');
+  assert.deepEqual(stripRuntimeArgs(['--smol', 'https://example.com', '-v'], '--smol'), ['https://example.com', '-v']);
+  assert.deepEqual(stripRuntimeArgs(['https://example.com'], '--smol'), ['https://example.com']);
+  assert.deepEqual(stripRuntimeArgs(['--crawl', 'https://example.com'], ''), ['--crawl', 'https://example.com']);
+  assert.deepEqual(stripRuntimeArgs(['--smol', '--crawl', 'x'], '--smol --inspect'), ['--crawl', 'x']);
+});

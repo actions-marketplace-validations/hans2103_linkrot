@@ -264,6 +264,21 @@ export async function main(argv, env = process.env, deps = {}) {
   }
 }
 
+/**
+ * A Bun-compiled binary puts the runtime flags from BUN_OPTIONS (e.g. "--smol", set in some
+ * cloud sandboxes) into argv, where they would be read as linkrot options. Drop them.
+ */
+export function stripRuntimeArgs(args, bunOptions = '') {
+  const flags = new Set(String(bunOptions).split(/\s+/).filter((t) => t.startsWith('-')));
+  if (flags.size === 0) return args;
+  const out = [...args];
+  for (const flag of flags) {
+    const i = out.indexOf(flag);
+    if (i !== -1) out.splice(i, 1);
+  }
+  return out;
+}
+
 function isDirectRun() {
   if (import.meta.main === true) return true;
   if (!process.argv[1]) return false;
@@ -276,5 +291,5 @@ function isDirectRun() {
 
 if (isDirectRun()) {
   // exitCode, not process.exit: piped stdout may still be flushing.
-  process.exitCode = await main(process.argv.slice(2), process.env);
+  process.exitCode = await main(stripRuntimeArgs(process.argv.slice(2), process.env.BUN_OPTIONS), process.env);
 }
