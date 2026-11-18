@@ -200,12 +200,15 @@ Built in, so you don't get false alarms:
     `pingback` (`https://fonts.gstatic.com/` answers 404 at its root);
   - "add to calendar" links on `outlook.live.com/calendar/` and `outlook.office.com/calendar/`
     (they refuse bots);
+  - Cloudflare's e-mail obfuscation links (`/cdn-cgi/l/email-protection`): the address is decoded
+    in the browser, the path itself always answers 404;
   - anything matching `--exclude` / `exclude`, both external links and the site's own pages.
 - **Never reported:** `<link rel="canonical">`, `<link rel="alternate" hreflang>` and `og:url`, so
   a test site that points to production raises no alarms.
-- **Doubt, not broken:** status 403, 429 or 999 from `linkedin.com`, `facebook.com`,
-  `instagram.com`, `x.com` and `twitter.com` (and subdomains), any 429, and any timeout. Doubt is
-  listed separately and never changes the exit code.
+- **Doubt, not broken:** 403 or 999 from another site (nearly always bot protection; a 403 on your
+  own site stays broken), the same from `linkedin.com`, `facebook.com`, `instagram.com`, `x.com`
+  and `twitter.com`, any 429, a redirect that could not be followed (3xx as final answer), and any
+  timeout. Doubt is listed separately and never changes the exit code.
 - **Links that redirect off-site** count as external: linkrot checks them, but does not read the
   other site's pages.
 

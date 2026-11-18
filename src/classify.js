@@ -1,4 +1,5 @@
 import { DOUBT_HOSTS, NEVER_REPORT_KINDS } from './defaults.js';
+import { sameSite } from './discover.js';
 
 const DOUBT_CODES = new Set([403, 429, 999]);
 
@@ -12,10 +13,14 @@ function isDoubtHost(url) {
   return DOUBT_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
 }
 
-function isDoubt(url, code, timeout) {
+// Doubt, not broken: answers that say "not for a bot" or "not now" rather than "gone".
+// Another site's 403 is nearly always bot protection; on your own site it stays broken.
+// A 3xx as the final answer means a redirect lychee could not follow (loop, cookie wall).
+function isDoubt(url, code, timeout, external) {
   if (timeout) return true;
   if (code === 429) return true;
-  return DOUBT_CODES.has(code) && isDoubtHost(url);
+  if (code !== null && code >= 300 && code < 400) return true;
+  return DOUBT_CODES.has(code) && (external || isDoubtHost(url));
 }
 
 /**
@@ -42,7 +47,8 @@ export function classify(crawl, checks, { exclude = [] } = {}) {
   const add = (url, code, text, timeout) => {
     if (excluded(url)) return;
     const finding = { url, code, text, pages: referrers.get(url) ?? [] };
-    (isDoubt(url, code, timeout) ? doubt : broken).push(finding);
+    const external = Boolean(crawl.origin) && !sameSite(url, crawl.origin);
+    (isDoubt(url, code, timeout, external) ? doubt : broken).push(finding);
   };
 
   for (const [url, { status }] of crawl.pages) {

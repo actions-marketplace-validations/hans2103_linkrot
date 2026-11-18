@@ -20,8 +20,9 @@ test('defaults expose the global constants', () => {
   assert.deepEqual(NEVER_REPORT_KINDS, ['canonical', 'alternate', 'og']);
   assert.ok(DOUBT_HOSTS.includes('linkedin.com'));
   assert.equal(DOUBT_HOSTS.length, 5);
-  assert.equal(BUILTIN_EXCLUDES.length, 1);
+  assert.equal(BUILTIN_EXCLUDES.length, 2);
   assert.ok(new RegExp(BUILTIN_EXCLUDES[0]).test('https://outlook.live.com/calendar/x'));
+  assert.ok(new RegExp(BUILTIN_EXCLUDES[1]).test('https://example.nl/cdn-cgi/l/email-protection'));
 });
 
 test('404 is broken', () => {
@@ -39,16 +40,30 @@ test('429 from any host is doubt', () => {
   assert.equal(r.doubt.length, 1);
 });
 
-test('403 from linkedin (and subdomains) is doubt, from example.com broken', () => {
+test('403/999 from another site is doubt; 403 on the own site stays broken', () => {
   const a = 'https://www.linkedin.com/in/x';
   const b = 'https://example.com/x';
   const c = 'https://notlinkedin.com/x';
+  const own = `${O}/images/private.jpg`;
   const r = classify(
-    crawlOf({ refs: { [a]: [ref(`${O}/a`)], [b]: [ref(`${O}/a`)], [c]: [ref(`${O}/a`)] } }),
-    new Map([[a, res(403)], [b, res(403)], [c, res(999)]]),
+    crawlOf({ refs: { [a]: [ref(`${O}/a`)], [b]: [ref(`${O}/a`)], [c]: [ref(`${O}/a`)], [own]: [ref(`${O}/a`, 'img')] } }),
+    new Map([[a, res(403)], [b, res(403)], [c, res(999)], [own, res(403)]]),
   );
-  assert.deepEqual(r.doubt.map((f) => f.url), [a]);
-  assert.deepEqual(r.broken.map((f) => f.url).sort(), [b, c].sort());
+  assert.deepEqual(r.doubt.map((f) => f.url).sort(), [a, b, c].sort());
+  assert.deepEqual(r.broken.map((f) => f.url), [own]);
+});
+
+test('a 3xx final answer (redirect not followed) is doubt', () => {
+  const u = 'http://www.werk.nl/';
+  const r = classify(crawlOf({ refs: { [u]: [ref(`${O}/a`)] } }), new Map([[u, res(302)]]));
+  assert.equal(r.broken.length, 0);
+  assert.equal(r.doubt.length, 1);
+});
+
+test('404 on another site stays broken', () => {
+  const u = 'https://example.com/gone';
+  const r = classify(crawlOf({ refs: { [u]: [ref(`${O}/a`)] } }), new Map([[u, res(404)]]));
+  assert.equal(r.broken.length, 1);
 });
 
 test('timeout is doubt', () => {
